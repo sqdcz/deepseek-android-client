@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- generated from official ic_menu_outline_24 (res/uI.xml) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24.000000dp"
+    android:height="24.000000dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M13.19,17.958H3.074V16.157H13.19V17.958ZM20.927,7.843H3.074V6.042H20.927V7.843Z"
+        android:fillColor="#ff0f0f0f" />
+</vector>

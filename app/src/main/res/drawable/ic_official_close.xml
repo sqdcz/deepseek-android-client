@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- generated from official ic_close_outline_20 (res/Yv.xml) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20.000000dp"
+    android:height="20.000000dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path
+        android:pathData="M15.565,5.565L11.131,10L15.565,14.435L14.434,15.565L10,11.131L5.565,15.565L4.435,14.435L8.869,10L4.435,5.565L5.565,4.435L10,8.869L14.434,4.435L15.565,5.565Z"
+        android:fillColor="#ff545557" />
+</vector>
