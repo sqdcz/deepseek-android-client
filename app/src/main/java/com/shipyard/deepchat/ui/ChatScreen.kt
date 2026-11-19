@@ -80,6 +80,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -264,6 +265,7 @@ private fun ChatPane(
     var recActive by remember { mutableStateOf(false) }
     var recCancel by remember { mutableStateOf(false) }
     var recLevel by remember { mutableFloatStateOf(0f) }
+    var recSpectrum by remember { mutableStateOf<FloatArray?>(null) }
     var showUsage by remember { mutableStateOf(false) }
 
     LaunchedEffect(lastLen, lastReasonLen, messages.size, st.streaming) {
@@ -439,7 +441,9 @@ private fun ChatPane(
                         recActive = active
                         recCancel = cancel
                         recLevel = level
+                        if (!active) recSpectrum = null
                     },
+                    onSpectrum = { recSpectrum = it },
                     asrEngine = st.settings.asrEngine,
                     asrAutoFill = st.settings.asrAutoFill,
                     onFlash = { vm.flash(it) }
@@ -449,7 +453,7 @@ private fun ChatPane(
 
         // 录音浮层：不消费触摸，手势继续由输入卡片处理
         if (recActive) {
-            RecordingOverlay(cancel = recCancel, level = recLevel)
+            RecordingOverlay(cancel = recCancel, level = recLevel, spectrum = recSpectrum)
         }
 
         if (showUsage) {
@@ -621,7 +625,7 @@ fun ContextRing(used: Int, limit: Int, onClick: () -> Unit) {
 
 /** 长按说话的浮层，按官方那张图做的：白到蓝的渐变 + 提示 + 波形 */
 @Composable
-private fun RecordingOverlay(cancel: Boolean, level: Float) {
+private fun RecordingOverlay(cancel: Boolean, level: Float, spectrum: FloatArray?) {
     val grad = if (cancel) {
         listOf(Color.White, Color(0xFFFF7A7A))
     } else {
@@ -643,28 +647,29 @@ private fun RecordingOverlay(cancel: Boolean, level: Float) {
                 .fillMaxWidth()
         )
 
-        // 波形
+        // 实时频谱：100–4000Hz 对数分频，低频在左
         Canvas(
             Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 86.dp)
-                .fillMaxWidth(0.86f)
-                .height(48.dp)
+                .fillMaxWidth(0.84f)
+                .height(40.dp)
         ) {
-            val n = 42
-            val gap = size.width / n
+            val bars = spectrum ?: FloatArray(60) { 0f }
+            val n = bars.size
+            val gapPx = 2.dp.toPx()
+            val barW = ((size.width - gapPx * (n - 1)) / n).coerceAtLeast(1f)
+            val minH = 5.dp.toPx()
+            val maxH = size.height
             for (i in 0 until n) {
-                val t = i.toFloat() / n
-                val env = sin(t * Math.PI).toFloat().coerceAtLeast(0.12f)
-                val wobble = 0.45f + 0.55f * abs(sin(i * 0.7 + level * 6).toFloat())
-                val h = size.height * env * wobble * (0.35f + level * 0.9f)
-                val x = gap * i + gap / 2
-                drawLine(
-                    color = Color.White.copy(alpha = 0.85f),
-                    start = Offset(x, center.y - h / 2),
-                    end = Offset(x, center.y + h / 2),
-                    strokeWidth = gap * 0.36f,
-                    cap = StrokeCap.Round
+                val level = bars[i].coerceIn(0f, 1f)
+                val h = minH + (maxH - minH) * level
+                val x = i * (barW + gapPx)
+                drawRoundRect(
+                    color = Color.White.copy(alpha = 0.9f),
+                    topLeft = Offset(x, size.height - h),
+                    size = Size(barW, h),
+                    cornerRadius = CornerRadius(barW / 2f, barW / 2f)
                 )
             }
         }

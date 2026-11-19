@@ -32,6 +32,11 @@ class Recorder(private val ctx: Context) {
     var level: Float = 0f
         private set
 
+    /** 最近一帧的频谱高度（60 根，0..1），供浮层画柱 */
+    @Volatile
+    var latestSpectrum: FloatArray? = null
+        private set
+
     val isRunning: Boolean get() = running
 
     fun start(): Boolean {
@@ -64,21 +69,27 @@ class Recorder(private val ctx: Context) {
         thread = Thread {
             val tmp = ByteArray(3200)
             val maxBytes = SAMPLE_RATE * 2 * MAX_SECONDS
+            val analyzer = SpectrumAnalyzer(SAMPLE_RATE)
+            val shorts = ShortArray(1600)
             while (running) {
                 val n = r.read(tmp, 0, tmp.size)
                 if (n > 0) {
                     buf.write(tmp, 0, n)
                     var peak = 0
                     var i = 0
+                    var k = 0
                     while (i + 1 < n) {
                         val lo = tmp[i].toInt() and 0xFF
                         val hi = tmp[i + 1].toInt()
                         val s = (hi shl 8) or lo
                         val a = abs(s)
                         if (a > peak) peak = a
+                        if (k < shorts.size) shorts[k++] = s.toShort()
                         i += 2
                     }
                     level = (peak / 32768f).coerceIn(0f, 1f)
+                    // 真频谱：100–4000Hz 对数分频，60 根
+                    latestSpectrum = analyzer.push(shorts, k)
                     if (buf.size() >= maxBytes) running = false
                 }
             }

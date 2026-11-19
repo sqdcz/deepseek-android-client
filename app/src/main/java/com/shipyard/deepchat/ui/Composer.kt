@@ -111,6 +111,7 @@ fun Composer(
     onToggleWeb: () -> Unit,
     onAudioReady: ((File, (String?) -> Unit) -> Unit)? = null,
     onRecordUi: (active: Boolean, cancelHint: Boolean, level: Float) -> Unit,
+    onSpectrum: (FloatArray) -> Unit = {},
     asrEngine: String = "system",
     asrAutoFill: Boolean = true,
     onFlash: (String) -> Unit = {}
@@ -165,6 +166,7 @@ fun Composer(
 
     fun bindAsr(e: AsrEngine) {
         e.onLevel = { if (recording) onRecordUi(true, cancelHint, it) }
+        e.onSpectrum = { if (recording) onSpectrum(it) }
         e.onFinal = { applyAsrResult(it) }
         e.onError = { msg ->
             recording = false
@@ -242,14 +244,17 @@ fun Composer(
     }
 
     LaunchedEffect(recording) {
-        if (!recording || asrEngine != "api") return@LaunchedEffect
+        if (!recording) return@LaunchedEffect
         while (recording) {
-            if (!recorder.isRunning) {
-                finishRecording(false)
-                break
+            if (asrEngine == "api") {
+                if (!recorder.isRunning) {
+                    finishRecording(false)
+                    break
+                }
+                recorder.latestSpectrum?.let { onSpectrum(it) }
+                onRecordUi(true, cancelHint, recorder.level)
             }
-            onRecordUi(true, cancelHint, recorder.level)
-            delay(70)
+            delay(60)
         }
     }
 
@@ -355,6 +360,17 @@ fun Composer(
                             if (it.isFocused) hadFocus = true
                             else if (hadFocus) focused = false
                         }
+                        .pointerInput(focused, voiceMode) {
+                            // 只在未聚焦的文字态接管点击；聚焦后完全交给 TextField，光标才能自由定位
+                            if (focused || voiceMode) return@pointerInput
+                            detectTapGestures(
+                                onTap = {
+                                    runCatching { focusRequester.requestFocus() }
+                                    runCatching { keyboard?.show() }
+                                },
+                                onLongPress = { }
+                            )
+                        }
                 )
                 if (value.text.isEmpty() && !focused) {
                     Text(
@@ -365,21 +381,11 @@ fun Composer(
                         maxLines = 2
                     )
                 }
-                if (!focused) {
+                if (!focused && voiceMode) {
                     Box(
                         Modifier
                             .matchParentSize()
-                            .pointerInput(voiceMode) {
-                                if (!voiceMode) {
-                                    detectTapGestures(
-                                        onTap = {
-                                            runCatching { focusRequester.requestFocus() }
-                                            runCatching { keyboard?.show() }
-                                        },
-                                        onLongPress = { /* 吃掉，别让输入框弹选择菜单 */ }
-                                    )
-                                    return@pointerInput
-                                }
+                            .pointerInput(Unit) {
                                 coroutineScope {
                                     awaitEachGesture {
                                         val down = awaitFirstDown(

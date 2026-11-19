@@ -21,8 +21,8 @@ android {
         applicationId = "com.shipyard.deepchat"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.7"
+        versionCode = 9
+        versionName = "1.8"
         vectorDrawables.useSupportLibrary = true
         // Vosk 只留两个手机架构，体积砍一半
         ndk {

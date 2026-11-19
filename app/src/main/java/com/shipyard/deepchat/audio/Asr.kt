@@ -22,6 +22,7 @@ interface AsrEngine {
     var onFinal: ((String) -> Unit)?
     var onError: ((String) -> Unit)?
     var onLevel: ((Float) -> Unit)?
+    var onSpectrum: ((FloatArray) -> Unit)?
 
     fun start(): Boolean
     /** 松手：结束录音并等最终结果 */
@@ -42,6 +43,7 @@ class SystemAsr(private val ctx: Context) : AsrEngine {
     override var onFinal: ((String) -> Unit)? = null
     override var onError: ((String) -> Unit)? = null
     override var onLevel: ((Float) -> Unit)? = null
+    override var onSpectrum: ((FloatArray) -> Unit)? = null
 
     private var recognizer: SpeechRecognizer? = null
     private var lastText = ""
@@ -139,6 +141,7 @@ class VoskAsr(private val ctx: Context, private val modelDir: File) : AsrEngine 
     override var onFinal: ((String) -> Unit)? = null
     override var onError: ((String) -> Unit)? = null
     override var onLevel: ((Float) -> Unit)? = null
+    override var onSpectrum: ((FloatArray) -> Unit)? = null
 
     private var model: org.vosk.Model? = null
     private var record: AudioRecord? = null
@@ -204,18 +207,26 @@ class VoskAsr(private val ctx: Context, private val modelDir: File) : AsrEngine 
             }
             val buf = ByteArray(4096)
             val acc = StringBuilder()
+            val analyzer = SpectrumAnalyzer(AsrModel.SAMPLE_RATE)
+            val shorts = ShortArray(2048)
             while (running) {
                 val n = r.read(buf, 0, buf.size)
                 if (n <= 0) continue
                 var sum = 0.0
                 var i = 0
+                var k = 0
                 while (i + 1 < n) {
                     val s = ((buf[i].toInt() and 0xff) or (buf[i + 1].toInt() shl 8)).toShort()
                     sum += abs(s.toInt()).toDouble()
+                    if (k < shorts.size) shorts[k++] = s
                     i += 2
                 }
                 val lvl = (sum / (n / 2).coerceAtLeast(1) / 8000.0).coerceIn(0.0, 1.0)
-                main.post { onLevel?.invoke(lvl.toFloat()) }
+                val spec = analyzer.push(shorts, k)
+                main.post {
+                    onLevel?.invoke(lvl.toFloat())
+                    onSpectrum?.invoke(spec)
+                }
 
                 if (recognizer.acceptWaveForm(buf, n)) {
                     val t = textOf(recognizer.result)
