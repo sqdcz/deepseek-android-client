@@ -43,6 +43,10 @@ sealed interface ChatEvent {
     data class ToolStart(val id: String, val kind: String, val label: String) : ChatEvent
     data class ToolDone(val id: String, val status: String, val sources: List<Citation>) : ChatEvent
     data class Raw(val tools: String = "", val annotations: String = "") : ChatEvent
+    /** 服务端生成的会话标题 */
+    data class Title(val text: String) : ChatEvent
+    /** 正文引用：Anthropic 兼容接口按文本块下发 */
+    data class Cite(val url: String, val title: String?) : ChatEvent
     data class Done(val finishReason: String?) : ChatEvent
     data class Failed(val message: String) : ChatEvent
 }

@@ -99,6 +99,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shipyard.deepchat.R
 import com.shipyard.deepchat.data.Conversation
+import com.shipyard.deepchat.data.versionsOf
+import com.shipyard.deepchat.data.visibleMessages
 import com.shipyard.deepchat.data.Msg
 import com.shipyard.deepchat.data.Store
 import com.shipyard.deepchat.ui.theme.DeepChatTheme
@@ -256,7 +258,7 @@ private fun ChatPane(
     val ctx = LocalContext.current
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val conv = st.current
-    val messages = conv?.messages.orEmpty()
+    val messages = conv?.visibleMessages().orEmpty()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val lastLen = messages.lastOrNull()?.content?.length ?: 0
@@ -354,6 +356,7 @@ private fun ChatPane(
                         contentPadding = PaddingValues(bottom = 14.dp)
                     ) {
                         items(messages, key = { it.id }) { m ->
+                            val versions = conv?.versionsOf(m.id).orEmpty()
                             MessageItem(
                                 msg = m,
                                 streaming = st.streaming && st.streamingId == m.id,
@@ -361,7 +364,11 @@ private fun ChatPane(
                                 showReasoning = st.settings.showReasoning,
                                 onRegenerate = { vm.regenerate() },
                                 onEdit = { onEdit(m) },
-                                onSpeak = { vm.speakNow(it) }
+                                onSpeak = { vm.speakNow(it) },
+                                versionIds = versions.map { it.id },
+                                versionIndex = versions.indexOfFirst { it.id == m.id }
+                                    .coerceAtLeast(0),
+                                onSwitchVersion = { vm.switchVersion(it) }
                             )
                         }
                     }

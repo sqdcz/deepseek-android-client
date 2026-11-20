@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9
+
+- **消息分支**：会话改为树结构（`parentId` / `selectedChildId`），重新生成和编辑提问都生成新分支，助手回答与用户提问下方都能用 `‹ 2/3 ›` 切版本；老数据首次操作时自动补链
+- **双协议**：DeepSeek 官方服务商改走 Anthropic 兼容接口 `/anthropic/v1/messages`，拿到服务端生成的标题、`safety_check` 风控与 `content_block` 结构的引用；第三方中转继续走 `/chat/completions`
+- 历史消息不回传 `thinking` 块（Anthropic 要求签名，当前未保存，回传会被拒）
+
 ## 1.8
 
 - 修复输入框点按无法定位光标：未聚焦时的手势处理改挂到 TextField 自身，聚焦后完全交还

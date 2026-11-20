@@ -9,11 +9,13 @@
 **对话**
 
 - 流式输出，可随时中断
+- **消息分支**：重新生成与编辑提问都会生成新分支，用 `‹ 2/3 ›` 在版本间切换
 - 深度思考（`thinking` / `reasoning_content`），思考过程可折叠
 - 联网搜索（`deepseek_web_search` / `deepseek_read_url`），引用来源可点
 - 图片输入（多模态）
 - Markdown、代码块高亮、LaTeX 公式、表格
 - 多会话、置顶、全文搜索、重命名、导出 Markdown
+- 双协议：DeepSeek 官方走 Anthropic 兼容接口（服务端生成标题、风控、引用块），第三方走 `/chat/completions`
 
 **语音**
 

@@ -8,6 +8,12 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.shipyard.deepchat.data.Citation
 import com.shipyard.deepchat.data.Conversation
+import com.shipyard.deepchat.data.appendBranch
+import com.shipyard.deepchat.data.normalized
+import com.shipyard.deepchat.data.patchMessage
+import com.shipyard.deepchat.data.selectVersion
+import com.shipyard.deepchat.data.versionsOf
+import com.shipyard.deepchat.data.visibleMessages
 import com.shipyard.deepchat.data.Msg
 import com.shipyard.deepchat.data.Provider
 import com.shipyard.deepchat.data.Settings
@@ -58,6 +64,7 @@ data class UiState(
 class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private val api = ApiClient()
+    private val anthropic = com.shipyard.deepchat.net.AnthropicClient().bind(ctx)
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
     private var job: Job? = null
@@ -166,9 +173,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
         val um = Msg(role = "user", content = text.trim(), images = images)
         val am = Msg(role = "assistant", content = "")
-        conv = conv.copy(
-            messages = conv.messages + um + am,
-            title = if (conv.messages.none { it.isUser }) titleOf(text, images) else conv.title,
+        val visible = conv.visibleMessages()
+        val parentId = visible.lastOrNull()?.id
+        conv = conv.appendBranch(parentId, listOf(um, am)).copy(
+            title = if (visible.none { it.isUser }) titleOf(text, images) else conv.title,
             updatedAt = System.currentTimeMillis()
         )
         commit(conv)
@@ -178,28 +186,33 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun regenerate() {
         val cur = _state.value.current ?: return
         if (_state.value.streaming) return
-        val msgs = cur.messages.toMutableList()
-        while (msgs.isNotEmpty() && !msgs.last().isUser) msgs.removeAt(msgs.size - 1)
-        if (msgs.isEmpty()) return
+        val base = cur.normalized()
+        val lastUser = base.visibleMessages().lastOrNull { it.isUser } ?: return
         val am = Msg(role = "assistant", content = "")
-        val conv = cur.copy(messages = msgs + am, updatedAt = System.currentTimeMillis())
+        // 挂在 lastUser 下，成为旧回答的兄弟版本
+        val conv = base.appendBranch(lastUser.id, listOf(am))
+            .copy(updatedAt = System.currentTimeMillis())
         commit(conv)
         startStream(conv, am.id)
     }
 
     fun editAndResend(msgId: String, newText: String) {
         val cur = _state.value.current ?: return
-        val idx = cur.messages.indexOfFirst { it.id == msgId }
-        if (idx < 0) return
-        val kept = cur.messages.subList(0, idx).toMutableList()
-        val edited = cur.messages[idx].copy(content = newText.trim())
+        val base = cur.normalized()
+        val target = base.messages.firstOrNull { it.id == msgId } ?: return
+        val edited = Msg(role = "user", content = newText.trim(), images = target.images)
         val am = Msg(role = "assistant", content = "")
-        val conv = cur.copy(
-            messages = kept + edited + am,
-            updatedAt = System.currentTimeMillis()
-        )
+        val conv = base.appendBranch(target.parentId, listOf(edited, am))
+            .copy(updatedAt = System.currentTimeMillis())
         commit(conv)
         startStream(conv, am.id)
+    }
+
+    /** 切换同一个问题下的回答版本 */
+    fun switchVersion(msgId: String) {
+        val cur = _state.value.current ?: return
+        if (_state.value.streaming) return
+        commit(cur.selectVersion(msgId))
     }
 
     fun stop() {
@@ -376,7 +389,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private fun startStream(base0: Conversation, aiId: String) {
         val p = providerFor(base0)
         val base = base0.copy(providerId = p.id, model = modelFor(base0, p))
-        val history = base.messages.filter { it.id != aiId }
+        val history = base.visibleMessages().filter { it.id != aiId }
         val startAt = System.currentTimeMillis()
 
         _state.update { it.copy(streaming = true, streamingId = aiId, statusText = "") }
@@ -385,7 +398,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
         job = viewModelScope.launch {
             var tokens = 0
-            api.stream(ctx, p, convForApi, history).collect { ev ->
+            val useAnthropic = p.isDeepSeek && p.baseUrl.contains("deepseek", ignoreCase = true)
+            val events = if (useAnthropic) anthropic.stream(p, convForApi, history)
+            else api.stream(ctx, p, convForApi, history)
+            events.collect { ev ->
                 when (ev) {
                     is ChatEvent.Text -> {
                         appendToMsg(aiId) { it.copy(content = it.content + ev.delta) }
@@ -417,6 +433,31 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                                 rawTools = ev.tools.ifBlank { m.rawTools },
                                 rawAnnotations = ev.annotations.ifBlank { m.rawAnnotations },
                                 citations = mergeCitations(m.citations, cites)
+                            )
+                        }
+                    }
+                    is ChatEvent.Title -> {
+                        val t = ev.text.trim()
+                        if (t.isNotBlank()) {
+                            _state.update { st ->
+                                val c = st.current ?: return@update st
+                                val nc = c.copy(title = t.take(40))
+                                st.copy(
+                                    current = nc,
+                                    conversations = st.conversations.map {
+                                        if (it.id == c.id) nc else it
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    is ChatEvent.Cite -> {
+                        appendToMsg(aiId) { m ->
+                            m.copy(
+                                citations = mergeCitations(
+                                    m.citations,
+                                    listOf(Citation(title = ev.title ?: ev.url, url = ev.url))
+                                )
                             )
                         }
                     }

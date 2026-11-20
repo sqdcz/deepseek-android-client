@@ -31,6 +31,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ChevronLeft
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ExpandLess
@@ -80,7 +82,10 @@ fun MessageItem(
     showReasoning: Boolean = true,
     onRegenerate: () -> Unit,
     onEdit: (String) -> Unit,
-    onSpeak: (String) -> Unit = {}
+    onSpeak: (String) -> Unit = {},
+    versionIds: List<String> = emptyList(),
+    versionIndex: Int = 0,
+    onSwitchVersion: (String) -> Unit = {}
 ) {
     val cs = MaterialTheme.colorScheme
     if (msg.isUser) {
@@ -91,6 +96,17 @@ fun MessageItem(
                 .padding(start = 56.dp, end = 14.dp, top = 12.dp, bottom = 2.dp),
             horizontalAlignment = Alignment.End
         ) {
+            if (versionIds.size > 1) {
+                VersionBar(
+                    count = versionIds.size,
+                    index = versionIndex,
+                    onPrev = { onSwitchVersion(versionIds[maxOf(0, versionIndex - 1)]) },
+                    onNext = {
+                        onSwitchVersion(versionIds[minOf(versionIds.size - 1, versionIndex + 1)])
+                    }
+                )
+                Spacer(Modifier.height(2.dp))
+            }
             if (msg.images.isNotEmpty()) {
                 ImageStrip(msg.images)
                 Spacer(Modifier.height(6.dp))
@@ -182,7 +198,17 @@ fun MessageItem(
 
         if (!streaming && (msg.content.isNotBlank() || msg.error != null)) {
             Spacer(Modifier.height(10.dp))
-            ActionRow(msg = msg, onRegenerate = onRegenerate, onSpeak = onSpeak)
+            ActionRow(
+                msg = msg,
+                onRegenerate = onRegenerate,
+                onSpeak = onSpeak,
+                versionCount = versionIds.size,
+                versionIndex = versionIndex,
+                onPrev = { onSwitchVersion(versionIds[maxOf(0, versionIndex - 1)]) },
+                onNext = {
+                    onSwitchVersion(versionIds[minOf(versionIds.size - 1, versionIndex + 1)])
+                }
+            )
             Text(
                 "本回答由 AI 生成，内容仅供参考，请仔细甄别",
                 style = MaterialTheme.typography.labelSmall,
@@ -198,7 +224,11 @@ fun MessageItem(
 private fun ActionRow(
     msg: Msg,
     onRegenerate: () -> Unit,
-    onSpeak: (String) -> Unit
+    onSpeak: (String) -> Unit,
+    versionCount: Int = 1,
+    versionIndex: Int = 0,
+    onPrev: () -> Unit = {},
+    onNext: () -> Unit = {}
 ) {
     val ctx = LocalContext.current
     val clip = LocalClipboardManager.current
@@ -218,6 +248,57 @@ private fun ActionRow(
         }
         Spacer(Modifier.width(20.dp))
         IconAction(painterResource(R.drawable.ic_official_redo), "重新生成", onRegenerate)
+        if (versionCount > 1) {
+            Spacer(Modifier.width(18.dp))
+            VersionBar(
+                count = versionCount,
+                index = versionIndex,
+                onPrev = onPrev,
+                onNext = onNext,
+                compact = true
+            )
+        }
+    }
+}
+
+/** 多版本切换：‹ 2/3 › */
+@Composable
+private fun VersionBar(
+    count: Int,
+    index: Int,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    compact: Boolean = false
+) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(horizontal = if (compact) 0.dp else 4.dp)
+    ) {
+        val canPrev = index > 0
+        val canNext = index < count - 1
+        Icon(
+            Icons.Rounded.ChevronLeft,
+            contentDescription = "上一个版本",
+            modifier = Modifier
+                .size(18.dp)
+                .clickable(enabled = canPrev) { onPrev() },
+            tint = cs.onSurfaceVariant.copy(alpha = if (canPrev) 0.9f else 0.25f)
+        )
+        Text(
+            "${index + 1}/$count",
+            style = MaterialTheme.typography.labelSmall,
+            color = cs.onSurfaceVariant.copy(alpha = 0.75f),
+            modifier = Modifier.padding(horizontal = 1.dp)
+        )
+        Icon(
+            Icons.Rounded.ChevronRight,
+            contentDescription = "下一个版本",
+            modifier = Modifier
+                .size(18.dp)
+                .clickable(enabled = canNext) { onNext() },
+            tint = cs.onSurfaceVariant.copy(alpha = if (canNext) 0.9f else 0.25f)
+        )
     }
 }
 

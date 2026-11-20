@@ -35,7 +35,11 @@ data class Msg(
     val stopped: Boolean = false,
     /** 原样保存 server_tool_calls，多轮时 DeepSeek 要求完整回传 */
     val rawTools: String = "",
-    val rawAnnotations: String = ""
+    val rawAnnotations: String = "",
+    /** 分支树：父节点 id，根为 null */
+    val parentId: String? = null,
+    /** 分支树：当前选中的子节点，多版本时指向其中一个 */
+    val selectedChildId: String? = null
 ) {
     val isUser: Boolean get() = role == "user"
 }
@@ -53,7 +57,9 @@ data class Conversation(
     val thinking: Boolean = true,
     val effort: String = "high",
     val webSearch: Boolean = false,
-    val systemPrompt: String = ""
+    val systemPrompt: String = "",
+    /** 分支树根节点；null 表示仍是老的线性结构 */
+    val rootId: String? = null
 ) {
     val preview: String
         get() = messages.lastOrNull()?.let { m ->
